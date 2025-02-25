@@ -1,5 +1,4 @@
-old
-datasets
-
-# Ignore virtual environment
+# Ignore virtual environment and database
 .venv
+.env
+fecomdb.db
