@@ -1,65 +1,85 @@
 import os
+import model.model as model
+from gpt4all import GPT4All
 import streamlit as st
-from model_loader import ModelLoader  # Importa o carregador dinâmico
+from model.model_loader import load_model
 from database.database import query_database, buscar_resposta_cache, salvar_resposta
 from cache.cache import get_database_schema
 from config.config import MODEL_PATH
 
-# 🔄 Carrega o modelo (OpenChat ou GPT4All) baseado em MODEL_TYPE
-model = ModelLoader()
-
 def generate_response(user_question):
-    """Gera uma resposta usando o modelo selecionado + contexto do banco de dados."""
-    
-    # 1. Verifica se a pergunta está vazia
+    """Busca no cache ou gera uma nova resposta se necessário."""
+
+    if model is None:
+        return "❌ O modelo não foi carregado corretamente."
+
     if not user_question.strip():
         return "❌ Por favor, insira uma pergunta válida."
 
-    # 2. Busca resposta no cache (se existir)
+    # 🔍 Verifica se o usuário pediu para listar as tabelas
+    if any(keyword in user_question.strip().lower() for keyword in ["mostrar tabelas", "listar tabelas", "quais tabelas existem", "mostrar as tabelas", "tabelas", "tabela"]):
+        schema = get_database_schema()
+        if not schema:
+            return "❌ Erro ao buscar a estrutura do banco de dados."
+        return f"📊 O banco contém as seguintes tabelas:\n" + "\n".join([f"- {table}" for table in schema.keys()])
+
+    # 🔥 Primeiro, verifica se a resposta já está no cache
     resposta_cache = buscar_resposta_cache(user_question)
     if resposta_cache:
         return f"📌 **Resposta recuperada do histórico:**\n\n{resposta_cache}"
 
-    # 3. Obtém a estrutura do banco de dados
+    # 🔍 Obtém a estrutura do banco
     schema = get_database_schema()
     if not schema:
         return "❌ Erro ao buscar a estrutura do banco de dados."
 
-    # 4. Identifica a tabela relevante com base na pergunta
+    # 🔍 Identificar automaticamente a tabela mais relevante com base nos termos da pergunta
     table_to_query = None
-    for table in schema.keys():
-        if table.lower() in user_question.lower():
+    for table, columns in schema.items():
+        # Verifica se o nome da tabela ou alguma coluna está na pergunta
+        if table.lower() in user_question.lower() or any(col.lower() in user_question.lower() for col in columns):
             table_to_query = table
             break
 
-    # Se nenhuma tabela for encontrada, lista as disponíveis
+    # Se nenhuma tabela for encontrada, retorna uma mensagem genérica
     if not table_to_query:
-        return f"📊 O banco contém as seguintes tabelas:\n" + "\n".join([f"- {table}" for table in schema.keys()])
+        return "❓ Não consegui identificar uma tabela relevante para sua pergunta. Por favor, seja mais específico."
 
-    # 5. Consulta o banco de dados (limita a 5 registros para otimização)
-    columns = ", ".join(schema[table_to_query][:5])  # Pega as primeiras 5 colunas
+    # 🔍 Consulta otimizada (busca apenas colunas mais relevantes)
+    columns = ", ".join(schema[table_to_query][:5])  # Limita a 5 colunas para otimizar
     query = f'SELECT {columns} FROM "{table_to_query}" ORDER BY ROWID DESC LIMIT 5;'
+    # possibilidade de criar uma trigger ou procedure para criar uma tabela de cache com as respostas mais frequentes
+    # Executa a consulta no banco de dados e obtém os resultados. [ideia de Alberto Ramos] =P
     result = query_database(query)
 
     if isinstance(result, str):
-        return result  # Retorna mensagem de erro SQL (se houver)
+        return result  # Retorna erro de SQL, se houver
 
-    # 6. Prepara o prompt para o modelo (OpenChat/GPT4All)
+    # 🔥 Agora pedimos para a LLM interpretar os dados
     dados_texto = "\n".join([", ".join(map(str, row)) for row in result])
     prompt = f"""
-    Você é um assistente especializado em bancos de dados. 
-    Aqui estão os últimos registros da tabela '{table_to_query}':
+    Você é um assistente que responde perguntas sobre um banco de dados.
+    Aqui estão os últimos registros extraídos:
 
     {dados_texto}
 
-    Com base nesses dados, responda de forma clara e concisa:
+    Com base nesses dados, responda à seguinte pergunta de forma clara e objetiva:
     "{user_question}"
     """
 
-    # 7. Gera a resposta usando o modelo carregado
     try:
         resposta = model.generate(prompt).strip()
-        salvar_resposta(user_question, resposta)  # Salva no cache
+        
+
+        # 🔥 Salvar resposta no cache para aprendizado futuro
+        salvar_resposta(user_question, resposta)
+
         return resposta
     except Exception as e:
-        return f"❌ Erro ao gerar resposta: {str(e)}"
+        return f"❌ Erro ao processar a solicitação: {str(e)}"
+
+model = load_model()
+if model:
+    st.success(f"✅ Modelo carregado: {os.getenv('MODEL_TYPE')}")
+else:
+    st.error("❌ Falha ao carregar o modelo.")
