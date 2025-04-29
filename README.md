@@ -50,10 +50,12 @@ cp .env.example .env
 #### **Exemplo do `.env`**
 ```ini
 # Caminho do banco de dados (altere conforme necessário)
-DB_PATH=meu_banco_local.db
+DB_PATH=banco_padrao.db
 
 # Caminho do modelo GPT4All (altere conforme necessário)
-MODEL_PATH=/Users/seu_usuario/Library/Application Support/nomic.ai/GPT4All/Nous-Hermes-2-Mistral-7B-DPO.Q4_0.gguf
+MODEL_PATH=\nomic.ai\GPT4All\DeepSeek-R1-Distill-Qwen-7B-Q4_0.gguf
+MODEL_TYPE=openchat
+OPENCHAT_MODEL=openchat/openchat_3.5
 ```
 
 No Windows:
