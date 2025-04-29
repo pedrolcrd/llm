@@ -4,3 +4,9 @@ llama-index
 streamlit 
 gpt4all
 flake8
+gpt4all[cuda]
+transformers 
+huggingface_hub
+torch
+accelerate
+watchdog
