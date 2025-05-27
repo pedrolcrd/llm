@@ -62,7 +62,6 @@ def generate_sql(question: str, table: str, model_name: str = None) -> str:
     raw = llm.invoke(messages)
     return strip_sql_markup(raw)
 
-@lru_cache(maxsize=64)
 def interpret(sql: str, db_result: Any, model_name: str = None) -> str:
     llm = load_ollama_model(model_name)
     resumo_prompt = (
